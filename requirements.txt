@@ -1,0 +1,7 @@
+aiohttp
+pandas
+openpyxl
+jieba
+wordcloud
+matplotlib
+lxml
