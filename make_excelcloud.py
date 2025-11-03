@@ -4,112 +4,117 @@ from collections import Counter
 import openpyxl
 import jieba
 import re
-from bullet_screen import get_bullet_screen
-from bv_maker import get_bv, BV_NUM
 
-# 设置中文字体，确保中文正常显示
+# 设置中文字体
 plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC"]
-jieba.setLogLevel(jieba.logging.INFO)   # 去除jieba警告
+jieba.setLogLevel(jieba.logging.INFO)
 
 
 def is_noise(bullet: str) -> bool:
-    """
-    判断是否为无意义噪声弹幕
-    :param bullet: 原始弹幕
-    :return: True（噪声）/False（有效）
-    """
-    # 过滤规则：空内容、纯数字、纯符号、过短内容
+    """判断弹幕是否为无意义的噪声信息"""
+    noise_patterns = [
+        r'^\s*$', r'^6+$', r'^[0-9]+$', r'^[^\w\s]+$',
+        r'^[赞好强牛6666]+$', r'^[啊啊啊哈哈哈哈嘿嘿嘿]+$',
+        r'^[一二三四五六七八九零]+$', r'^[是的对的没错]+$',
+        r'^[？?！!。,.，、]+$', r'^[观看中路过飘过]+$',
+        r'^[视频不错很好]+$',
+    ]
+
     bullet = bullet.strip()
     if len(bullet) < 3:
         return True
-    # 纯数字或纯符号
-    if re.match(r'^[0-9]+$', bullet) or re.match(r'^[^\w\s]+$', bullet):
-        return True
-    # 简单重复无意义内容（如666、哈哈哈）
-    if re.match(r'^[6哈啊]+$', bullet):
-        return True
+
+    for pattern in noise_patterns:
+        if re.match(pattern, bullet):
+            return True
+
     return False
 
 
 def confirm(bullet: str) -> bool:
-    """
-    确认是否与AI应用相关
-    :param bullet: 原始弹幕
-    :return: True（相关）/False（不相关）
-    """
+    """判断弹幕是否与大语言模型相关"""
     keywords = [
-        '人工智能', 'AI', '机器学习', '深度学习', '神经网络',
-        '自动驾驶', '自然语言处理', '智能', 'ai', '大模型',
-        'GPT', 'ChatGPT', '生成式AI', '计算机视觉'
-    ]  # 扩展AI相关关键词
-    bullet = bullet.lower()
-    # 关键词前后非字母，避免匹配单词中间的子串
+        '大语言模型', '大模型', 'LLM', 'llm',
+        'GPT', 'gpt', '文心一言', 'ERNIE', 'ernie',
+        '讯飞星火', '通义千问', '智谱AI', 'Claude', 'claude'
+    ]
+    # 统一转为小写匹配，避免大小写遗漏
     pattern = r'(?<![a-zA-Z])(?:' + '|'.join(re.escape(kw) for kw in keywords) + r')(?![a-zA-Z])'
-    return bool(re.search(pattern, bullet))
+    return bool(re.search(pattern, bullet.lower()))
 
 
-def make_word_cloud(bullet_screen_list: list) -> None:
-    """
-    将AI应用相关弹幕写入Excel，并生成词云图
-    :param bullet_screen_list: 原始弹幕列表
-    """
-    # 过滤噪声和非AI相关弹幕
-    ai_related_bullet = []
+def make_word_cloud(bullet_screen_list: list) -> list:
+    """处理弹幕数据，仅统计前8名（Excel无排名列），词云大小写视为同一词"""
+    # 过滤噪声和不相关弹幕
+    filtered_bullet = []
     for bullet in bullet_screen_list:
         if not is_noise(bullet) and confirm(bullet):
-            # 简单清洗：去除特殊符号和多余空格
             cleaned = re.sub(r'[^\w\s]', ' ', bullet)
             cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-            ai_related_bullet.append(cleaned)
-    
-    if not ai_related_bullet:
-        print("未找到相关AI应用弹幕")
-        return
-    
-    # 统计前8高频弹幕
-    top8 = Counter(ai_related_bullet).most_common(8)
-    print("排名前8的AI相关弹幕：")
-    for item in top8:
+            filtered_bullet.append(cleaned)
+
+    if not filtered_bullet:
+        raise ValueError("没有找到相关的弹幕内容")
+
+    # 仅获取前8名弹幕统计
+    top8_bullet = Counter(filtered_bullet).most_common(8)
+    print("排名前8的完整弹幕及其出现次数：")
+    for item in top8_bullet:
         print(f"{item[0]}: {item[1]}次")
-    
-    # 写入Excel
+
+    # 生成Excel（移除排名列，仅保留弹幕内容和出现次数）
     wb = openpyxl.Workbook()
     sheet = wb.active
-    sheet.title = "AI Related Bullet-Screen"
-    sheet.append(["弹幕内容", "出现次数"])
-    for item in top8:
+    sheet.title = "大语言模型弹幕前8统计"
+    sheet.append(["弹幕内容", "出现次数"])  # 移除排名列
+    for item in top8_bullet:  # 直接遍历前8名，不添加排名
         sheet.append([item[0], item[1]])
-    # 补充统计信息
-    sheet.append([])
-    sheet.append(["总有效弹幕数", len(ai_related_bullet)])
-    sheet.append(["不重复弹幕数", len(set(ai_related_bullet))])
-    wb.save('ai_bullet_screen示例.xlsx')
-    print("数据已写入Excel")
-    
-    # 生成词云图（保留原始风格，优化显示）
-    text = ' '.join(ai_related_bullet)
-    cut_text = ' '.join(jieba.cut(text))  # 中文分词
-    
-    # 词云配置（保留原始参数结构，优化字体和显示）
+    wb.save('大语言模型弹幕前8统计.xlsx')
+    print("前8名弹幕数据已写入Excel（无排名列）")
+
+    # 生成词云
+    all_words = []
+    for bullet, _ in top8_bullet:
+        words = jieba.cut(bullet)
+        for word in words:
+            # 大小写归一化：转为小写统计
+            lower_word = word.lower()
+            if len(lower_word) >= 2 and not re.match(r'^\d+$', lower_word):
+                all_words.append(lower_word)
+
+    if not all_words:
+        print("无有效词语生成词云")
+        return filtered_bullet
+
+    # 统计归一化后的词频
+    word_counts = Counter(all_words)
+    # 保留原始词语的大小写形式用于显示
+    word_display_map = {}
+    for bullet, _ in top8_bullet:
+        for word in jieba.cut(bullet):
+            lower_word = word.lower()
+            if lower_word in word_counts and lower_word not in word_display_map:
+                word_display_map[lower_word] = word  # 记录首次出现的原始形式
+
+    # 生成词云数据
+    word_freq = {
+        word_display_map.get(lower_word, lower_word): count / max(word_counts.values())
+        for lower_word, count in word_counts.items()
+    }
+
+    # 生成词云图
     wordcloud = WordCloud(
-        font_path='C:/Windows/Fonts/simhei.ttf',  # 替换为系统存在的中文字体
-        width=800,
-        height=400,
+        font_path='C:/Windows/Fonts/simhei.ttf',
+        width=1200, height=600,
         background_color='white',
-        colormap='cool',  # 保留原始配色
-        max_words=200,    # 最多显示200个词
-        prefer_horizontal=0.9  # 优先水平显示
-    ).generate(cut_text)
-    
-    # 显示并保存词云图
-    plt.figure(figsize=(10, 5))
+        max_words=50
+    ).generate_from_frequencies(word_freq)
+
+    plt.figure(figsize=(15, 8))
     plt.imshow(wordcloud, interpolation='bilinear')
     plt.axis('off')
-    plt.savefig('ai_bullet_wordcloud.png', dpi=300, bbox_inches='tight')  # 保存图片
-    plt.show()
+    plt.savefig('大语言模型弹幕前8词云图.png', dpi=300)
+    print("基于前8名弹幕的词云图已保存")
+    plt.close()
 
-
-if __name__ == '__main__':
-    bv_list = get_bv(BV_NUM)
-    bullet_screen_list = get_bullet_screen(bv_list)
-    make_word_cloud(bullet_screen_list)
+    return filtered_bullet
