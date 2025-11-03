@@ -1,17 +1,40 @@
+"""
+主程序模块
+"""
 from bullet_screen import get_bullet_screen
 from bv_maker import get_bv, BV_NUM
 from word_cloud import make_word_cloud
+import logging
+import os
+
+# 配置日志
+os.makedirs('logs', exist_ok=True)
+logging.basicConfig(
+    filename='logs/crawl.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+def main():
+    try:
+        print(f"开始爬取{BV_NUM}个相关视频的BV号...")
+        logging.info(f"开始爬取{BV_NUM}个相关视频的BV号")
+        
+        bv_list = get_bv(BV_NUM)
+        print(f"成功获取{len(bv_list)}个BV号，开始爬取弹幕...")
+        logging.info(f"成功获取{len(bv_list)}个BV号")
+
+        bullet_screen_list = get_bullet_screen(bv_list)
+        print(f"共爬取到{len(bullet_screen_list)}条弹幕")
+        logging.info(f"共爬取到{len(bullet_screen_list)}条弹幕")
+
+        filtered_bullet = make_word_cloud(bullet_screen_list)
+        logging.info(f"处理完成，有效弹幕数：{len(filtered_bullet)}")
+        
+    except Exception as e:
+        print(f"程序出错：{e}")
+        logging.error(f"程序出错：{e}", exc_info=True)
+
 
 if __name__ == '__main__':
-    print(f"开始爬取{BV_NUM}个相关视频的BV号...")
-    bv_list = get_bv(BV_NUM)
-    print(f"成功获取{len(bv_list)}个BV号，开始爬取弹幕...")
-    
-    bullet_screen_list = get_bullet_screen(bv_list)
-    print(f"共爬取到{len(bullet_screen_list)}条弹幕")
-    
-    try:
-        filtered_bullet = make_word_cloud(bullet_screen_list)
-        # 可以在这里添加数据分析代码
-    except ValueError as e:
-        print(f"处理出错：{e}")
+    main()
