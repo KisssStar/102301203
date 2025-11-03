@@ -53,7 +53,7 @@ def make_word_cloud(bullet_screen_list):
     for item in top8:
         print(f"{item[0]}: {item[1]}次")
 
-    # ------------------- Excel生成部分（完整保留） -------------------
+    # ------------------- Excel生成部分--------------------------------
     # 写入Excel
     wb = openpyxl.Workbook()
     sheet = wb.active
@@ -70,53 +70,28 @@ def make_word_cloud(bullet_screen_list):
     # -----------------------------------------------------------------
 
     # 生成词云图（修复字体问题）
-    text = ' '.join(filtered_bullet)
+     text = ' '.join(filtered_bullet)
     cut_text = ' '.join(jieba.cut(text))
-    print("分词结果示例：", cut_text[:100])  # 调试用
     if not cut_text.strip():
         raise ValueError("分词后无有效内容，无法生成词云")
 
-    # 修正字体路径（根据系统选择）
+    # 移除 contour 相关参数（可能触发 deepcopy）
     wordcloud = WordCloud(
-        font_path='C:/Windows/Fonts/simhei.ttf',  # Windows系统
-        # font_path='/System/Library/Fonts/PingFang.ttc',  # Mac系统
+        font_path='C:/Windows/Fonts/simhei.ttf',  # 确保字体存在
         width=1200,
         height=600,
         background_color='white',
         colormap='viridis',
-        max_words=200,
-        contour_width=1,
-        contour_color='steelblue'
+        max_words=200
+        # 去掉 contour_width 和 contour_color，减少复杂计算
     ).generate(cut_text)
 
-    # 显示并保存词云图
+    # 简化绘图逻辑
     plt.figure(figsize=(15, 8))
-    plt.title('大语言模型相关弹幕词云图', fontsize=20)
-    plt.imshow(wordcloud, interpolation='bilinear')
-    plt.axis('off')
-    plt.tight_layout(pad=0)
-    plt.savefig('大语言模型弹幕词云图.png', dpi=300, bbox_inches='tight')
-    print("词云图已保存")
-    plt.show()
+    plt.imshow(wordcloud)
+    plt.axis('off')  # 关闭坐标轴
+    plt.savefig('大语言模型弹幕词云图.png', dpi=300)  # 直接保存
+    print("词云图已保存为PNG文件")
+    plt.close()  # 关闭绘图窗口，避免显示环节的问题
 
     return filtered_bullet
-
-# 测试代码（可替换为你的实际弹幕列表）
-if __name__ == "__main__":
-    test_bullets = [
-        "大语言模型真厉害",
-        "这个大模型不错",
-        "LLM的应用很广泛",
-        "大语言模型真厉害",
-        "llm最近很火",
-        "大模型的发展很快",
-        "大语言模型真厉害",
-        "支持大语言模型",
-        "大模型YYDS",
-        "LLMyyds",
-        "大语言模型真厉害",
-        "666",  # 噪声
-        "123",  # 噪声
-        "这个技术不错"  # 不相关
-    ]
-    make_word_cloud(test_bullets)
