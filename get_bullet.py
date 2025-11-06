@@ -3,6 +3,8 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import time
+import concurrent.futures
+import re
 
 # 请求头配置
 HEADER = {
@@ -13,6 +15,7 @@ HEADER = {
 # 弹幕相关API模板
 CID_API_TEMPLATE = "https://api.bilibili.com/x/player/pagelist?bvid={bv}&jsonp=jsonp"
 DANMU_API_TEMPLATE = "https://comment.bilibili.com/{cid}.xml"
+
 
 # 创建带重试机制的会话
 def create_session():
@@ -29,58 +32,78 @@ def create_session():
     return session
 
 
+def get_single_video_danmu(bv, session):
+    """获取单个视频的弹幕内容"""
+    try:
+        # 1. 获取CID
+        cid_url = CID_API_TEMPLATE.format(bv=bv)
+        resp_cid = session.get(cid_url, timeout=10)
+        resp_cid.raise_for_status()
+        cid_data = resp_cid.json()
+        cid = cid_data["data"][0]["cid"]
+
+        # 2. 获取弹幕XML
+        danmu_url = DANMU_API_TEMPLATE.format(cid=cid)
+        resp_danmu = session.get(danmu_url, timeout=10)
+        resp_danmu.encoding = "utf-8"
+        resp_danmu.raise_for_status()
+
+        # 3. 使用正则表达式替代BeautifulSoup解析，性能提升显著
+        danmu_texts = []
+        danmu_pattern = re.compile(r'<d[^>]*>(.*?)</d>')
+        matches = danmu_pattern.findall(resp_danmu.text)
+
+        for match in matches:
+            text = match.strip()
+            if text:
+                danmu_texts.append(text)
+
+        return danmu_texts, bv, None
+
+    except Exception as e:
+        return [], bv, str(e)
+
+
 def get_bullet(bv_list):
-    """根据BV号列表爬取对应视频的弹幕内容"""
+    """根据BV号列表爬取对应视频的弹幕内容 - 优化版"""
     bullet_screen_list = []
     session = create_session()
 
-    for idx, bv in enumerate(bv_list, 1):
-        print(f"正在处理第{idx}/{len(bv_list)}个BV号: {bv}")
+    print(f"开始处理 {len(bv_list)} 个视频的弹幕爬取...")
+    start_time = time.time()
 
-        # 1. 获取CID
-        try:
-            cid_url = CID_API_TEMPLATE.format(bv=bv)
-            resp_cid = session.get(cid_url, timeout=10)
-            resp_cid.raise_for_status()
-            cid = resp_cid.json()["data"][0]["cid"]
-        except Exception as e:
-            print(f"获取CID失败：{e}")
-            continue
+    # 使用线程池并发处理多个视频（控制并发数避免被封IP）
+    max_workers = min(5, len(bv_list))
 
-        # 2. 获取弹幕
-        try:
-            danmu_url = DANMU_API_TEMPLATE.format(cid=cid)
-            resp_danmu = session.get(danmu_url, timeout=10)
-            resp_danmu.encoding = "utf-8"
-            resp_danmu.raise_for_status()
-        except Exception as e:
-            print(f"获取弹幕失败：{e}")
-            continue
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # 提交所有任务
+        future_to_bv = {
+            executor.submit(get_single_video_danmu, bv, session): bv
+            for bv in bv_list
+        }
 
-        # 3. 解析弹幕
-        try:
-            xml_soup = BeautifulSoup(resp_danmu.text, "xml")
-            danmu_tags = xml_soup.find_all("d")
-            danmu_texts = [tag.text.strip() for tag in danmu_tags if tag.text.strip()]
-            bullet_screen_list.extend(danmu_texts)
-            print(f"成功获取{len(danmu_texts)}条弹幕")
-        except Exception as e:
-            print(f"解析弹幕失败：{e}")
-            continue
+        completed_count = 0
+        # 处理完成的任务
+        for future in concurrent.futures.as_completed(future_to_bv):
+            bv = future_to_bv[future]
+            completed_count += 1
 
-        # 控制爬取速度
-        if idx % 10 == 0:
-            time.sleep(2)  # 每处理10个视频休息2秒
-        else:
-            time.sleep(0.5)
+            try:
+                danmu_texts, result_bv, error = future.result()
+                if error:
+                    print(f"处理 {bv} 失败: {error}")
+                else:
+                    bullet_screen_list.extend(danmu_texts)
+                    print(f"[{completed_count}/{len(bv_list)}] {bv}: 成功获取 {len(danmu_texts)} 条弹幕")
+
+            except Exception as e:
+                print(f"处理 {bv} 时发生异常: {e}")
 
     session.close()
+
+    total_time = time.time() - start_time
+    print(f"爬取完成！总共获取 {len(bullet_screen_list)} 条弹幕")
+    print(f"总耗时: {total_time:.2f}秒, 平均每个视频: {total_time / len(bv_list):.2f}秒")
+
     return bullet_screen_list
 
-
-if __name__ == '__main__':
-    from search_bv import get_bv
-    test_bv_list = get_bv(5)
-    print(f"测试用BV号：{test_bv_list}")
-    test_danmu = get_bullet(test_bv_list)
-    print(f"测试爬取到{len(test_danmu)}条弹幕（前3条预览）：{test_danmu[:3]}")
