@@ -1,5 +1,4 @@
 import requests
-from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import time
@@ -65,7 +64,7 @@ def get_single_video_danmu(bv, session):
 
 
 def get_bullet(bv_list):
-    """根据BV号列表爬取对应视频的弹幕内容 - 优化版"""
+    """根据BV号列表爬取对应视频的弹幕内容 """
     bullet_screen_list = []
     session = create_session()
 
@@ -103,7 +102,12 @@ def get_bullet(bv_list):
 
     total_time = time.time() - start_time
     print(f"爬取完成！总共获取 {len(bullet_screen_list)} 条弹幕")
-    print(f"总耗时: {total_time:.2f}秒, 平均每个视频: {total_time / len(bv_list):.2f}秒")
 
     return bullet_screen_list
 
+if __name__ == '__main__':
+    from search_bv import search_bv
+    test_bv_list = search_bv(5)
+    print(f"测试用BV号：{test_bv_list}")
+    test_danmu = get_bullet(test_bv_list)
+    print(f"测试爬取到{len(test_danmu)}条弹幕（前3条预览）：{test_danmu[:3]}")
