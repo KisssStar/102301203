@@ -7,7 +7,6 @@ import random
 
 # 配置参数
 BV_NUM = 300  # 需要爬取的视频数量
-# 扩展搜索关键词，提高相关视频命中率
 Search_Content = "大语言模型 大模型 LLM GPT ChatGPT 文心一言 讯飞星火 通义千问"
 MAX_RETRY = 3  # 最大重试次数
 RETRY_DELAY = 2  # 重试延迟基础时间（秒）
